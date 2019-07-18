@@ -21,19 +21,19 @@ func main() {
 
 	directory := flag.String("d", ".", "the directory which is crawled")
 	hostFile := flag.String("i", "", "textfile which contains the hostnames")
+	outputDirectory := flag.String("o", "", "directory for output csv file. The directory must exit!")
 	flag.Parse()
 
 	if *hostFile == "" {
 		log.Fatal("no hostfile given")
 	}
 
-	dataInfos := make(map[string]advancedFileInfo)
-
 	hostNames, err := getHostNames(*hostFile)
 	if err != nil {
 		log.Fatal(err.Error())
 	}
 
+	dataInfos := make(map[string]advancedFileInfo)
 	err = filepath.Walk(*directory,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -51,12 +51,31 @@ func main() {
 		log.Println(err)
 	}
 
+	fileRows := []string{}
 	for _, fileInfo := range dataInfos {
 		for _, hostName := range hostNames {
 			if strings.Contains(fileInfo.FileInfo.Name(), hostName) {
-				fmt.Printf("Full Path: %s, Name: %s; Size: %d; Modified: %v;\n", fileInfo.FilePath, fileInfo.FileInfo.Name(), fileInfo.FileInfo.Size(), fileInfo.FileInfo.ModTime())
+				row := fmt.Sprintf("%s,%s,%s,%s\n", fileInfo.FilePath, fileInfo.FileInfo.Name(), ByteCountDecimal(fileInfo.FileInfo.Size()), fileInfo.FileInfo.ModTime().Format("2006-01-02 15:04:05"))
+				fileRows = append(fileRows, row)
 			}
 		}
+	}
+
+	baseDirectoryName := filepath.Base(*directory)
+	timestamp := time.Now()
+	stringTimeStamp := fmt.Sprintf("%02d-%02d-%02d--%02d-%02d-%02d", timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), timestamp.Second())
+	outputFileName := baseDirectoryName + "_" + stringTimeStamp + ".csv"
+	outputFileName = strings.Replace(outputFileName, " ", "", -1)
+	outputFile, err := os.Create(filepath.Join(*outputDirectory, outputFileName))
+	if err != nil {
+		outputFile.Close()
+		log.Fatalf("error creating file: %s\n", err.Error())
+	}
+	defer outputFile.Close()
+
+	fmt.Fprintln(outputFile, "Voller Pfad,Dateiname,Groesse,Letzte Aenderung")
+	for _, fileRow := range fileRows {
+		fmt.Fprint(outputFile, fileRow)
 	}
 
 	log.Printf("runtime: %s\n", time.Since(startTime))
@@ -78,4 +97,17 @@ func getHostNames(hostsFilePath string) ([]string, error) {
 	}
 
 	return hostNames, nil
+}
+
+func ByteCountDecimal(b int64) string {
+	const unit = 1000
+	if b < unit {
+		return fmt.Sprintf("%d B", b)
+	}
+	div, exp := int64(unit), 0
+	for n := b / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "kMGTPE"[exp])
 }

@@ -21,7 +21,7 @@ func main() {
 
 	directory := flag.String("d", ".", "the directory which is crawled")
 	hostFile := flag.String("i", "", "textfile which contains the hostnames")
-	outputDirectory := flag.String("o", "", "directory for output csv file. The directory must exit!")
+	outputDirectory := flag.String("o", "", "directory for output csv file. The directory must exist!")
 	flag.Parse()
 
 	if *hostFile == "" {

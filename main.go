@@ -33,50 +33,16 @@ func main() {
 		log.Fatal(err.Error())
 	}
 
-	dataInfos := make(map[string]advancedFileInfo)
-	err = filepath.Walk(*directory,
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-
-			if !info.IsDir() {
-				advancedFileInfo := advancedFileInfo{FileInfo: info, FilePath: path}
-				dataInfos[info.Name()] = advancedFileInfo
-			}
-
-			return nil
-		})
+	dataInfos := getFileInformation(*directory)
 	if err != nil {
 		log.Println(err)
 	}
 
-	fileRows := []string{}
-	for _, fileInfo := range dataInfos {
-		for _, hostName := range hostNames {
-			if strings.Contains(fileInfo.FileInfo.Name(), hostName) {
-				row := fmt.Sprintf("%s,%s,%s,%s\n", fileInfo.FilePath, fileInfo.FileInfo.Name(), ByteCountDecimal(fileInfo.FileInfo.Size()), fileInfo.FileInfo.ModTime().Format("2006-01-02 15:04:05"))
-				fileRows = append(fileRows, row)
-			}
-		}
-	}
+	fileRows := buildFileRows(dataInfos, hostNames)
 
-	baseDirectoryName := filepath.Base(*directory)
-	timestamp := time.Now()
-	stringTimeStamp := fmt.Sprintf("%02d-%02d-%02d--%02d-%02d-%02d", timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), timestamp.Second())
-	outputFileName := baseDirectoryName + "_" + stringTimeStamp + ".csv"
-	outputFileName = strings.Replace(outputFileName, " ", "", -1)
-	outputFile, err := os.Create(filepath.Join(*outputDirectory, outputFileName))
-	if err != nil {
-		outputFile.Close()
-		log.Fatalf("error creating file: %s\n", err.Error())
-	}
-	defer outputFile.Close()
+	outputFileName := buildFileName(*directory)
 
-	fmt.Fprintln(outputFile, "Voller Pfad,Dateiname,Groesse,Letzte Aenderung")
-	for _, fileRow := range fileRows {
-		fmt.Fprint(outputFile, fileRow)
-	}
+	writeOutputFile(*outputDirectory, outputFileName, fileRows)
 
 	log.Printf("runtime: %s\n", time.Since(startTime))
 }
@@ -99,7 +65,52 @@ func getHostNames(hostsFilePath string) ([]string, error) {
 	return hostNames, nil
 }
 
-func ByteCountDecimal(b int64) string {
+func getFileInformation(directory string) map[string]advancedFileInfo {
+	dataInfos := make(map[string]advancedFileInfo)
+	err := filepath.Walk(directory,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				advancedFileInfo := advancedFileInfo{FileInfo: info, FilePath: path}
+				dataInfos[info.Name()] = advancedFileInfo
+			}
+
+			return nil
+		})
+	if err != nil {
+		log.Println(err)
+	}
+
+	return dataInfos
+}
+
+func buildFileRows(fileInfos map[string]advancedFileInfo, hostNames []string) []string {
+	fileRows := []string{}
+	for _, fileInfo := range fileInfos {
+		for _, hostName := range hostNames {
+			if strings.Contains(fileInfo.FileInfo.Name(), hostName) {
+				row := fmt.Sprintf("%s,%s,%s,%s\n", fileInfo.FilePath, fileInfo.FileInfo.Name(), byteCountDecimal(fileInfo.FileInfo.Size()), fileInfo.FileInfo.ModTime().Format("2006-01-02 15:04:05"))
+				fileRows = append(fileRows, row)
+			}
+		}
+	}
+	return fileRows
+}
+
+func buildFileName(directory string) string {
+	baseDirectoryName := filepath.Base(directory)
+	timestamp := time.Now()
+	stringTimeStamp := fmt.Sprintf("%02d-%02d-%02d--%02d-%02d-%02d", timestamp.Year(), timestamp.Month(), timestamp.Day(), timestamp.Hour(), timestamp.Minute(), timestamp.Second())
+	outputFileName := baseDirectoryName + "_" + stringTimeStamp + ".csv"
+	outputFileName = strings.Replace(outputFileName, " ", "", -1)
+
+	return outputFileName
+}
+
+func byteCountDecimal(b int64) string {
 	const unit = 1000
 	if b < unit {
 		return fmt.Sprintf("%d B", b)
@@ -110,4 +121,18 @@ func ByteCountDecimal(b int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(b)/float64(div), "kMGTPE"[exp])
+}
+
+func writeOutputFile(outputDirectory string, outputFileName string, fileRows []string) {
+	outputFile, err := os.Create(filepath.Join(outputDirectory, outputFileName))
+	if err != nil {
+		outputFile.Close()
+		log.Fatalf("error creating file: %s\n", err.Error())
+	}
+	defer outputFile.Close()
+
+	fmt.Fprintln(outputFile, "Voller Pfad,Dateiname,Groesse,Letzte Aenderung")
+	for _, fileRow := range fileRows {
+		fmt.Fprint(outputFile, fileRow)
+	}
 }
